@@ -9,4 +9,7 @@
     <item android:id="@+id/action_map"
         android:title="Map"
         app:showAsAction="never"  />
+    <item android:id="@+id/action_load_saved"
+        android:title="Saved"
+        app:showAsAction="never" />
 </menu>

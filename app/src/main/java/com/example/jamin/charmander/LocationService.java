@@ -13,13 +13,8 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.Log;
-import android.widget.Toast;
 
-import com.google.android.gms.maps.CameraUpdateFactory;
-import com.google.android.gms.maps.model.BitmapDescriptorFactory;
-import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.MarkerOptions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,6 +43,9 @@ public class LocationService extends Service {
 
     private static final int GPS_BUFFER = 0;
     private static final int NETWORK_BUFFER = 1;
+    private static final int SCAN_INTERVAL = 9000; // 9 seconds
+    private static final int REST_INTERVAL = 1000; // 1 second
+
 
     private static List<List<Location>> mGPSList; // ArrayList of ArrayList of locations. Each arraylist inside mGPSList represent a scan interval of coordinates
     private static List<List<Location>> mNetworkList;
@@ -250,14 +248,14 @@ public class LocationService extends Service {
 
     public void run() {
         new Thread(new Runnable() {
-            int scanInterval = 6000; // 2 seconds to scan
-            int restInterval = 4000; // 3 seconds until next scan. Interval totals 5 seconds
+            // 9 seconds to scan
+            // 1 seconds until next scan. Interval totals 10 seconds
             @Override
             public void run() {
                 // TODO Auto-generated method stub
                 while (isListening) {
                     try {
-                        timeUntilNextInterval = SystemClock.elapsedRealtime() + scanInterval; // Time until the end of interval
+                        timeUntilNextInterval = SystemClock.elapsedRealtime() + SCAN_INTERVAL; // Time until the end of interval
 
                         // Scanning Now
                         mHandler.post(new Runnable() {
@@ -279,7 +277,7 @@ public class LocationService extends Service {
                         });
 
 
-                        Thread.sleep(scanInterval); // Gives device scanInterval amount of time to scan for coordinates
+                        Thread.sleep(SCAN_INTERVAL); // Gives device scanInterval amount of time to scan for coordinates
 
                         // Stopping scan
                         mHandler.post(new Runnable() {
@@ -298,7 +296,7 @@ public class LocationService extends Service {
                             }
                         });
 
-                        timeUntilNextInterval = SystemClock.elapsedRealtime() + (scanInterval + restInterval); // New Interval. We sync/reset the timeUntilNextInterval to 5 seconds
+                        timeUntilNextInterval = SystemClock.elapsedRealtime() + (SCAN_INTERVAL + REST_INTERVAL); // New Interval. We sync/reset the timeUntilNextInterval to 5 seconds
                         // Flush the bufferLists into the Gps/Network list
                         mHandler.post(new Runnable() {
                             @Override
@@ -315,7 +313,7 @@ public class LocationService extends Service {
                             }
                         });
 
-                        Thread.sleep(restInterval); // Waits restInterval amount of time before next iteration
+                        Thread.sleep(REST_INTERVAL); // Waits restInterval amount of time before next iteration
                     } catch (Exception e) {
                         // TODO: handle exception
                     }
