@@ -7,8 +7,8 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.provider.BaseColumns;
 
+import java.sql.Date;
 import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.Objects;
 
 /**
@@ -106,7 +106,7 @@ public final class DatabaseHelper {
         return newRowId;
     }
 
-    public static long writeRouteRow(Context context, String routeId, double lat, double lng, float accuracy, int listener, long time) {
+    public static long writeRouteRow(Context context, String routeId, double lat, double lng, float accuracy, int listener, long time, int groupNum) {
         // Gets the data repository in write mode
         SQLiteDatabase db = getWritableDatabase(context, ROUTE_DATABASE, routeId);
 
@@ -117,7 +117,7 @@ public final class DatabaseHelper {
         values.put(RouteReaderContract.RouteEntry.COLUMN_NAME_ACCURACY, accuracy);
         values.put(RouteReaderContract.RouteEntry.COLUMN_NAME_LISTENER, listener);
         values.put(RouteReaderContract.RouteEntry.COLUMN_NAME_TIME, time);
-        values.put(RouteReaderContract.RouteEntry.COLUMN_NAME_GROUP, RouteReaderDbHelper.getGroup());
+        values.put(RouteReaderContract.RouteEntry.COLUMN_NAME_GROUP, groupNum);
 
         // Insert the new row, returning the primary key value of the new row
         long newRowId;
@@ -128,6 +128,23 @@ public final class DatabaseHelper {
 
         db.close();
         return newRowId;
+    }
+
+    public static void writeRouteSet(Context context, String routeId, RoutePointsSet set) {
+        int groupNum = getMaxGroup(context, routeId) + 1; // get the biggest group number in the table and increment by 1
+
+        // Iterate across the set
+        for (int i = 0; i < set.getSize(); i++) {
+            // for each point
+            RoutePoint curLocation = set.get(i);
+            double lat = curLocation.getLatitude();
+            double lng = curLocation.getLongitude();
+            float acc = curLocation.getAccuracy();
+            int listener = curLocation.getListener();
+            long time = curLocation.getUTCTime();
+            writeRouteRow(context, routeId, lat, lng, acc, listener, time, groupNum);
+        }
+
     }
 
 
@@ -164,7 +181,8 @@ public final class DatabaseHelper {
 
         // Create date string for current time (now)
         // SimpleDateFormat newDate = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        Date now = new Date();
+        java.util.Date utilNow = new java.util.Date();
+        Date now = new Date(utilNow.getTime());
         values.put(UserReaderContract.UserEntry.COLUMN_NAME_DATE_MODIFIED, now.getTime()); // Updating modified date to current date
 
         // Which row to update, based on the ID
@@ -269,6 +287,39 @@ public final class DatabaseHelper {
         return c;
     }
 
+    public static int getMaxGroup(Context context, String tableId) { // Get max group # for the current table
+        // Accessing the route database
+        SQLiteDatabase db = getReadableDatabase(context, ROUTE_DATABASE, tableId);
+        String[] projection = new String[]{
+                "MAX(" + RouteReaderContract.RouteEntry.COLUMN_NAME_GROUP + ")"
+        };
+
+        String selection = null;
+        String[] selectionArgs = null;
+        String sortOrder = null;
+
+        Cursor c = db.query(
+                tableId,                                  // The table to query
+                projection,                               // The columns to return
+                selection,                                // The columns for the WHERE clause
+                selectionArgs,                            // The values for the WHERE clause
+                null,                                     // don't group the rows
+                null,                                     // don't filter by row groups
+                sortOrder                                 // The sort order
+        );
+
+
+        db.close();
+
+        if (c.getCount() == 0) {
+            // No query. returns -1
+            return -1;
+        }
+
+        // Else we return the max count
+        return c.getInt(c.getColumnIndex(RouteReaderContract.RouteEntry.COLUMN_NAME_GROUP));
+    }
+
     public static Cursor readTable(Context context, int databaseType, String tableId) {
         if (databaseType < 0 || databaseType > 2) { // out of index
             return null;
@@ -303,10 +354,11 @@ public final class DatabaseHelper {
                     RouteReaderContract.RouteEntry.COLUMN_NAME_LONGITUDE,
                     RouteReaderContract.RouteEntry.COLUMN_NAME_ACCURACY,
                     RouteReaderContract.RouteEntry.COLUMN_NAME_LISTENER,
-                    RouteReaderContract.RouteEntry.COLUMN_NAME_TIME
+                    RouteReaderContract.RouteEntry.COLUMN_NAME_TIME,
+                    RouteReaderContract.RouteEntry.COLUMN_NAME_GROUP
             };
 
-            sortOrder = RouteReaderContract.RouteEntry.COLUMN_NAME_TIME + " ASC"; // Sort by time. Not really relevant
+            sortOrder = RouteReaderContract.RouteEntry.COLUMN_NAME_GROUP + " ASC"; // Sort by group.
         }
 
         Cursor c = db.query(
@@ -386,7 +438,6 @@ public final class DatabaseHelper {
     public static class RouteReaderDbHelper extends SQLiteOpenHelper {
         // If you change the database schema, you must increment the database version.
         public static final int DATABASE_VERSION = 1;
-        private static int group = 0; // Assigns each group/set of points together. Route is made of a group of sets of points
         private final String TABLENAME;
         private final String SQL_CREATE_ROUTE_ENTRIES;
         private final String SQL_DELETE_ROUTE_ENTRIES;
@@ -422,16 +473,8 @@ public final class DatabaseHelper {
             onUpgrade(db, oldVersion, newVersion);
         }
 
-        public static int getGroup() {
-            return group;
-        }
-
-        public static void incrementGroup() {
-            group++;
-        }
 
     }
 
-    public void increment
 
 }

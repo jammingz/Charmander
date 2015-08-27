@@ -16,6 +16,7 @@ import android.util.Log;
 
 import com.google.android.gms.maps.model.LatLng;
 
+import java.sql.Date;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,14 +44,19 @@ public class LocationService extends Service {
 
     private static final int GPS_BUFFER = 0;
     private static final int NETWORK_BUFFER = 1;
-    private static final int SCAN_INTERVAL = 9000; // 9 seconds
-    private static final int REST_INTERVAL = 1000; // 1 second
+    private static final int SCAN_INTERVAL = 7000; // 7 seconds
+    private static final int REST_INTERVAL = 3000; // 3 second
 
 
-    private static List<List<Location>> mGPSList; // ArrayList of ArrayList of locations. Each arraylist inside mGPSList represent a scan interval of coordinates
-    private static List<List<Location>> mNetworkList;
-    private static List<Location> mGPSBufferList;
-    private static List<Location> mNetworkBufferList;
+    //private static List<List<Location>> mGPSList; // ArrayList of ArrayList of locations. Each arraylist inside mGPSList represent a scan interval of coordinates
+    //private static List<List<Location>> mNetworkList;
+    //private static List<Location> mGPSBufferList;
+    //private static List<Location> mNetworkBufferList;
+
+    private static Route mGPSList; // ArrayList of ArrayList of locations. Each arraylist inside mGPSList represent a scan interval of coordinates
+    private static Route mNetworkList;
+    private static RoutePointsSet mGPSBufferList;
+    private static RoutePointsSet mNetworkBufferList;
     private static final Object listLock = new Object();
 
 
@@ -67,6 +73,13 @@ public class LocationService extends Service {
             //timer.cancel();
             double lat = location.getLatitude();
             double lng = location.getLongitude();
+            float acc = location.getAccuracy();
+            java.util.Date utilDate = new java.util.Date();
+            Date now = new Date(utilDate.getTime());
+
+            RoutePoint newPoint = new RoutePoint(lat, lng, acc, now.getTime(), GPS_BUFFER);
+
+
             //locationManager.removeUpdates(this);
             //locationManager.removeUpdates(NetworkListener);
 
@@ -86,7 +99,7 @@ public class LocationService extends Service {
                     + ", " + location.getLongitude() + "]");
 
             synchronized (listLock) {
-                mGPSBufferList.add(location);
+                mGPSBufferList.addPoint(newPoint);
             }
 
         }
@@ -111,6 +124,11 @@ public class LocationService extends Service {
             double lng = location.getLongitude();
             //locationManager.removeUpdates(this);
             //locationManager.removeUpdates(GPSListener);
+            float acc = location.getAccuracy();
+            java.util.Date utilDate = new java.util.Date();
+            Date now = new Date(utilDate.getTime());
+
+            RoutePoint newPoint = new RoutePoint(lat, lng, acc, now.getTime(), NETWORK_BUFFER);
 
 
             LatLng curLatLng = new LatLng(lat, lng);
@@ -128,7 +146,7 @@ public class LocationService extends Service {
 
             */
             synchronized (listLock) {
-                mNetworkBufferList.add(location);
+                mNetworkBufferList.addPoint(newPoint);
             }
         }
 
@@ -153,10 +171,16 @@ public class LocationService extends Service {
         m_wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
                 "String Wake Lock");
 
-        mGPSList = new ArrayList<List<Location>>(); // resets list
-        mNetworkList = new ArrayList<List<Location>>(); // resets list
-        mGPSBufferList = new ArrayList<Location>();
-        mNetworkBufferList = new ArrayList<Location>();
+        // mGPSList = new ArrayList<List<Location>>(); // resets list
+        // mNetworkList = new ArrayList<List<Location>>(); // resets list
+        // mGPSBufferList = new ArrayList<Location>();
+        // mNetworkBufferList = new ArrayList<Location>();
+
+        mGPSList = new Route();
+        mNetworkList = new Route();
+        mGPSBufferList = new RoutePointsSet();
+        mNetworkBufferList = new RoutePointsSet();
+
         isListening = false; // default is false until we start service
     }
 
@@ -209,6 +233,24 @@ public class LocationService extends Service {
     }
 
     // returns the accumlated gps/network lists and empties both lists
+    public List<Route> flush() {
+        List<Route> results = new ArrayList<Route>(2); // ArrayList of size (2) containing both GPSList and NetworkList
+        // Lock the lists so we dont add to the list and flush at the same time
+        synchronized (listLock) {
+            results.add(mGPSList);
+            results.add(mNetworkList);
+            mGPSList = new Route(); // empties list
+            mNetworkList = new Route(); // empties list
+        }
+
+        Log.d(TAG, "Flush() Called");
+
+        return results;
+    }
+
+
+    /*
+    // returns the accumlated gps/network lists and empties both lists
     public List<List<List<Location>>> flush() {
         List<List<List<Location>>> results = new ArrayList<List<List<Location>>>(2); // ArrayList of size (2) containing both GPSList and NetworkList
         // Lock the lists so we dont add to the list and flush at the same time
@@ -223,12 +265,33 @@ public class LocationService extends Service {
 
         return results;
     }
+    */
 
     // Returns results in milliseconds
     public long getTimeUntilFlush() {
         return timeUntilNextInterval - SystemClock.elapsedRealtime();
     }
 
+    // Slightly different from flush. This will flush the current interval (set of points) into the corresponding bigger list. Flushes RoutePointsSet into Route
+    public void flushBuffer(int buffer) {
+        switch (buffer) {
+            case GPS_BUFFER:
+                synchronized (listLock) {
+                    mGPSList.addSet(mGPSBufferList); // appends the GPS buffer arraylist into the GPS arraylist. GPS arraylist will not be empty unless we flush the GPS arraylist
+                    mGPSBufferList = new RoutePointsSet(); // now we empty out GPS buffer list
+                }
+                break;
+            case NETWORK_BUFFER:
+                synchronized (listLock) {
+                    mNetworkList.addSet(mNetworkBufferList); // appends the Network buffer arraylist into the Network arraylist. Network arraylist will not be empty unless we flush the Network arraylist
+                    mNetworkBufferList = new RoutePointsSet(); // now we empty out Network buffer list
+                }
+                break;
+        }
+    }
+
+    /*
+    // Slightly different from flush. This will flush the current interval (set of points) into the corresponding bigger list. Flushes RoutePointsSet into Route
     public void flushBuffer(int buffer) {
         switch (buffer) {
             case GPS_BUFFER:
@@ -245,6 +308,8 @@ public class LocationService extends Service {
                 break;
         }
     }
+
+    */
 
     public void run() {
         new Thread(new Runnable() {

@@ -46,6 +46,7 @@ public class RoutesDatabase {
                     float curAccuracy = curRouteCursor.getFloat(curRouteCursor.getColumnIndex(RouteReaderContract.RouteEntry.COLUMN_NAME_ACCURACY));
                     int curListener = curRouteCursor.getInt(curRouteCursor.getColumnIndex(RouteReaderContract.RouteEntry.COLUMN_NAME_LISTENER));
                     long curUTCTime = curRouteCursor.getLong(curRouteCursor.getColumnIndex(RouteReaderContract.RouteEntry.COLUMN_NAME_TIME));
+                    int curGroupNum = curRouteCursor.getInt(curRouteCursor.getColumnIndex(RouteReaderContract.RouteEntry.COLUMN_NAME_GROUP));
 
                     RoutePoint curPoint = new RoutePoint(curLatitude, curLongitude, curAccuracy, curUTCTime, curListener);
                     curRoute.addPoint(curPoint);

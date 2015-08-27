@@ -59,8 +59,10 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     private boolean isMapReady;
     private boolean isZoomLocal; // flag to zoom the first instance of map to the user's location
     private List<Location> coordsList;
-    private List<List<Location>> mGPSList;
-    private List<List<Location>> mNetworkList;
+    // private List<List<Location>> mGPSList;
+    //private List<List<Location>> mNetworkList;
+    private Route mGPSList;
+    private Route mNetworkList;
     private List<LatLng> mGPSAvgList;
     private List<LatLng> mNetworkAvgList;
     private static final Object listLock = new Object();
@@ -164,8 +166,10 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
         currentFragment = 0; // 0 is null. No fragment currently in fragmentcontainer
         coordsList = new ArrayList<Location>();
-        mGPSList = new ArrayList<List<Location>>();
-        mNetworkList = new ArrayList<List<Location>>();
+        //mGPSList = new ArrayList<List<Location>>();
+        //mNetworkList = new ArrayList<List<Location>>();
+        mGPSList = new Route();
+        mNetworkList = new Route();
 
         mGPSAvgList = new ArrayList<LatLng>();
         mNetworkAvgList = new ArrayList<LatLng>();
@@ -316,8 +320,10 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             @Override
             public void onClick(View v) {
                 mMap.clear();
-                mGPSList = new ArrayList<List<Location>>();
-                mNetworkList = new ArrayList<List<Location>>();
+                // mGPSList = new ArrayList<List<Location>>();
+                // mNetworkList = new ArrayList<List<Location>>();
+                mGPSList = new Route();
+                mNetworkList = new Route();
                 mGPSAvgList = new ArrayList<LatLng>();
                 mNetworkAvgList = new ArrayList<LatLng>();
             }
@@ -446,19 +452,19 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                             @Override
                             public void run() {
                                 if (isListening && isAwake) {
-                                    List<List<List<Location>>> flushResults = mService.flush();
+                                    List<Route> flushResults = mService.flush();
                                     Log.d(TAG,"Calling Flush()");
-                                    List<List<Location>> flushGPSList = flushResults.get(0);
-                                    List<List<Location>> flushNetworkList = flushResults.get(1);
+                                    Route flushGPSList = flushResults.get(0);
+                                    Route flushNetworkList = flushResults.get(1);
 
-                                    Log.d(TAG,"Flushed Size: (" + String.valueOf(flushGPSList.size()) + "," + String.valueOf(flushNetworkList.size()) + ")");
+                                    Log.d(TAG,"Flushed Size: (" + String.valueOf(flushGPSList.getSize()) + "," + String.valueOf(flushNetworkList.getSize()) + ")");
                                     // Plot each new interval into the map. Number of interval is the size of the flushGPSList/flushNetworkList. Each object is an interval of data
-                                    for (int i = 0; i < flushGPSList.size(); i++) {
-                                        List<Location> curGPSList = flushGPSList.get(i);
+                                    for (int i = 0; i < flushGPSList.getSize(); i++) {
+                                        RoutePointsSet curGPSList = flushGPSList.get(i);
                                         plotGPSInterval(curGPSList);
                                     }
-                                    for (int j = 0; j < flushNetworkList.size(); j++) {
-                                        List<Location> curNetworkList = flushNetworkList.get(j);
+                                    for (int j = 0; j < flushNetworkList.getSize(); j++) {
+                                        RoutePointsSet curNetworkList = flushNetworkList.get(j);
                                         plotNetworkInterval(curNetworkList);
                                     }
 
@@ -477,8 +483,10 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                                 }
                                 */
 
-                                        mGPSList.addAll(flushGPSList);
-                                        mNetworkList.addAll(flushNetworkList);
+                                        //mGPSList.addAll(flushGPSList);
+                                        //mNetworkList.addAll(flushNetworkList);
+                                        mGPSList.appendRoute(flushGPSList);
+                                        mNetworkList.appendRoute(flushNetworkList);
                                     }
 
                                 } else {
@@ -508,6 +516,111 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             }
         }).start();
     }
+
+    private void plotGPSInterval(RoutePointsSet GPSList) {
+        Log.d(TAG, "GPS List size: " + String.valueOf(GPSList.getSize()));
+        // Testing generic marker icon
+        Bitmap.Config conf = Bitmap.Config.ARGB_8888;
+        Bitmap bmp = Bitmap.createBitmap(200, 50, conf);
+        Canvas canvas = new Canvas(bmp);
+
+        if (GPSList.getSize() > 0) { // If the flushed list has GPS coordinates gathered, then we will process it
+            /*
+            long gps_time = gps_loc.getElapsedRealtimeNanos();
+            long net_time = net_loc.getElapsedRealtimeNanos();
+            float gps_acc = gps_loc.getAccuracy();
+            float net_acc = net_loc.getAccuracy();
+            */
+
+            double avg_gps_lat = 0.0;
+            double avg_gps_lng = 0.0;
+            double total_gps_lat = 0.0;
+            double total_gps_lng = 0.0;
+            double total_gps_weight = 0.0;
+
+            for (int i = 0; i < GPSList.getSize(); i++) {
+                // iterate across all the points taken from the GPS in the alloted interval time
+                RoutePoint curLocation = GPSList.get(i);
+                double cur_gps_lat = curLocation.getLatitude();
+                double cur_gps_lng = curLocation.getLongitude();
+                float cur_gps_acc = curLocation.getAccuracy();
+
+                LatLng curLatLng = new LatLng(cur_gps_lat, cur_gps_lng);
+                mMap.addMarker(new MarkerOptions().position(curLatLng).title("GPS Pin").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_CYAN)));
+                Log.d(TAG, "\n Added GPS: (" + cur_gps_lat + "," + cur_gps_lng + "), Accuracy: " + String.valueOf(cur_gps_acc));
+
+                float cur_accuracy = curLocation.getAccuracy();
+                double cur_weight =  getWeightFromAccuracy(cur_accuracy);
+
+                total_gps_lat += cur_gps_lat * cur_weight;
+                total_gps_lng += cur_gps_lng * cur_weight;
+                total_gps_weight += cur_weight;
+
+            }
+
+            avg_gps_lat = total_gps_lat / total_gps_weight;
+            avg_gps_lng = total_gps_lng / total_gps_weight;
+
+            LatLng avgGPS = new LatLng(avg_gps_lat, avg_gps_lng);
+            mMap.addMarker(new MarkerOptions().position(avgGPS).title("GPS Pin").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+            Log.d(TAG, "\nAdding GPS(Average): (" + avg_gps_lat + "," + avg_gps_lng + ")");
+            mGPSAvgList.add(avgGPS);
+        }
+
+
+    }
+    private void plotNetworkInterval(RoutePointsSet NetworkList) {
+        Log.d(TAG, "Network List size: " + String.valueOf(NetworkList.getSize()));
+        if (NetworkList.getSize() > 0) { // If the flushed list has Network coordinates gathered, then we will process it
+
+            /*
+            long gps_time = gps_loc.getElapsedRealtimeNanos();
+            long net_time = net_loc.getElapsedRealtimeNanos();
+            float gps_acc = gps_loc.getAccuracy();
+            float net_acc = net_loc.getAccuracy();
+            */
+
+            double avg_net_lat = 0.0;
+            double avg_net_lng = 0.0;
+
+            double total_net_lat = 0.0;
+            double total_net_lng = 0.0;
+            double total_net_weight = 0.0;
+
+            for (int i = 0; i < NetworkList.getSize(); i++) {
+                // iterate across all the points taken from the GPS in the alloted interval time
+                RoutePoint curLocation = NetworkList.get(i);
+                double cur_net_lat = curLocation.getLatitude();
+                double cur_net_lng = curLocation.getLongitude();
+                float cur_net_acc = curLocation.getAccuracy();
+
+                LatLng curLatLng = new LatLng(cur_net_lat, cur_net_lng);
+                mMap.addMarker(new MarkerOptions().position(curLatLng).title("Network Pin"));
+                Log.d(TAG, "\nAdding Network: (" + cur_net_lat + "," + cur_net_lng + "), Accuracy: " + String.valueOf(cur_net_acc));
+
+
+                float cur_accuracy = curLocation.getAccuracy();
+                double cur_weight =  getWeightFromAccuracy(cur_accuracy);
+
+                total_net_lat += cur_net_lat * cur_weight;
+                total_net_lng += cur_net_lng * cur_weight;
+                total_net_weight += cur_weight;
+
+            }
+
+            avg_net_lat = total_net_lat / total_net_weight;
+            avg_net_lng = total_net_lng / total_net_weight;
+
+
+            LatLng avgNetwork = new LatLng(avg_net_lat, avg_net_lng);
+            mMap.addMarker(new MarkerOptions().position(avgNetwork).title("Network Pin").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)));
+            Log.d(TAG, "\nAdding Network(Average): (" + avg_net_lat + "," + avg_net_lng + ")");
+            mNetworkAvgList.add(avgNetwork);
+
+        }
+    }
+
+
 
     private void plotGPSInterval(List<Location> GPSList) {
         Log.d(TAG, "GPS List size: " + String.valueOf(GPSList.size()));
