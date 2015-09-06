@@ -18,6 +18,6 @@ public class RouteReaderContract {
         public static final String COLUMN_NAME_ACCURACY = "Accuracy";
         public static final String COLUMN_NAME_LISTENER = "Listener";
         public static final String COLUMN_NAME_TIME = "Time";
-        public static final String COLUMN_NAME_GROUP = "Group"; // integer to determine which set # the point belongs to
+        public static final String COLUMN_NAME_GROUP = "GroupNum"; // integer to determine which set # the point belongs to
     }
 }

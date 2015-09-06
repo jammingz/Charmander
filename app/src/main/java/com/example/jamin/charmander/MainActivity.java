@@ -1,6 +1,7 @@
 package com.example.jamin.charmander;
 
 import android.app.FragmentTransaction;
+import android.app.ListFragment;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -18,9 +19,12 @@ import android.os.IBinder;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.Display;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.TextView;
@@ -31,6 +35,7 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
@@ -56,11 +61,13 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     private GoogleMap mMap;
     private ConsoleFragment mConsoleFragment;
     private RoutesFragment mRoutesFragment;
+    private static CustomAdapter mAdapter;
     private boolean isMapReady;
     private boolean isZoomLocal; // flag to zoom the first instance of map to the user's location
     private List<Location> coordsList;
     // private List<List<Location>> mGPSList;
     //private List<List<Location>> mNetworkList;
+    private static RoutesDatabase database;
     private Route mGPSList;
     private Route mNetworkList;
     private List<LatLng> mGPSAvgList;
@@ -168,6 +175,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         coordsList = new ArrayList<Location>();
         //mGPSList = new ArrayList<List<Location>>();
         //mNetworkList = new ArrayList<List<Location>>();
+        database = new RoutesDatabase(getApplicationContext());
+        database.load();
         mGPSList = new Route();
         mNetworkList = new Route();
 
@@ -379,10 +388,16 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             @Override
             public void onClick(View v) {
                 Toast.makeText(v.getContext(),"Saving...", Toast.LENGTH_SHORT).show();
+                // Saving to database
 
-                // Creating csv file to upload to server
+                if (mGPSList.getSize() == 0) {
+                    Toast.makeText(v.getContext(),"Route is Empty! Did not save.",Toast.LENGTH_SHORT).show();
+                } else {
+                    database.saveRoute(mGPSList); // Saves to database
+                    mAdapter.notifyDataSetChanged(); // Notify of updates
 
-
+                    Toast.makeText(v.getContext(), "Save Complete!", Toast.LENGTH_SHORT).show();
+                }
             }
         });
 
@@ -421,6 +436,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         mMapFragment = MapFragment.newInstance(); // Initialize instance of map
         mMapFragment.getMapAsync(this);
         mConsoleFragment = new ConsoleFragment(); // initializng fragments
+        mAdapter = new CustomAdapter();
         mRoutesFragment = new RoutesFragment();
         getMapFragment();
     }
@@ -518,6 +534,12 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     private void plotGPSInterval(RoutePointsSet GPSList) {
+        // We zoom to new location if we are not currently viewing local map
+        if (!isZoomLocal && GPSList.getSize() > 0) {
+            setZoomLocation(GPSList.get(0));
+        }
+
+
         Log.d(TAG, "GPS List size: " + String.valueOf(GPSList.getSize()));
         // Testing generic marker icon
         Bitmap.Config conf = Bitmap.Config.ARGB_8888;
@@ -570,6 +592,11 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     }
     private void plotNetworkInterval(RoutePointsSet NetworkList) {
+        // Zoom to local area with network data if there is no GPS data
+        if (!isZoomLocal && NetworkList.getSize() > 0) {
+            setZoomLocation(NetworkList.get(0));
+        }
+
         Log.d(TAG, "Network List size: " + String.valueOf(NetworkList.getSize()));
         if (NetworkList.getSize() > 0) { // If the flushed list has Network coordinates gathered, then we will process it
 
@@ -728,9 +755,18 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
 
-    public void setZoomLocation(Location location) {
+    public void zoomToLastKnownLocation() {
+        // Start the camera at last known location
+        if (lastKnownLocation == null) {
+            return; // do nothing if there is no last known location
+        }
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lastKnownLocation.getLatitude(), lastKnownLocation.getLongitude()), INITIAL_ZOOM_LEVEL));
 
-        /*
+        // Sets flag to true once we zoom to current location
+        isZoomLocal = true;
+    }
+
+    public void setZoomLocation(RoutePoint location) {
         // Construct a CameraPosition focusing on current location and animate the camera to that position.
         CameraPosition cameraPosition = new CameraPosition.Builder()
                 .target(new LatLng(location.getLatitude(),location.getLongitude()))      // Sets the center of the map to current location
@@ -741,18 +777,12 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
 
 
-        */
-
-
-        // Start the camera at last known location
-        if (lastKnownLocation == null) {
-            return; // do nothing if there is no last known location
-        }
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(location.getLatitude(), location.getLongitude()), INITIAL_ZOOM_LEVEL));
+        // mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(location.getLatitude(), location.getLongitude()), INITIAL_ZOOM_LEVEL));
 
         // Sets flag to true once we zoom to current location
         isZoomLocal = true;
     }
+
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -848,8 +878,6 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             console.setText(""); // Clears out the small textview
             console = (TextView) mConsoleFragment.getView().findViewById(R.id.console_large);
             console.setText(consoleString);
-
-
         }
     }
 
@@ -932,6 +960,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         consoleString += "\n onDestroy() Called";
         console.setText(consoleString);
         Log.d(TAG, "onDestroy() Called");
+        database.closeSQLConnections();
     }
 
     @Override
@@ -946,7 +975,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Test pin
         //googleMap.addMarker(new MarkerOptions().position(new LatLng(37.7796446, -122.2758692)).title("Test Pin"));
 
-        setZoomLocation(lastKnownLocation);
+        zoomToLastKnownLocation();
 
         for(int i = 0; i < coordsList.size() - 1; i++) {
             Location from = coordsList.get(i);
@@ -1178,5 +1207,55 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     */
+
+
+    public static class RoutesFragment extends ListFragment {
+
+        public RoutesFragment() {
+            // Required empty public constructor
+        }
+
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                                 Bundle savedInstanceState) {
+            View view = inflater.inflate(R.layout.fragment_routes, container, false);
+
+            setListAdapter(mAdapter);
+            return view;
+        }
+
+
+    }
+
+    public class CustomAdapter extends BaseAdapter {
+        @Override
+        public int getCount() {
+            return database.getSize();
+        }
+
+        @Override
+        public Route getItem(int position) {
+            return database.getRoute(position);
+        }
+
+        @Override
+        public long getItemId(int position) {
+            return database.getRoute(position).hashCode();
+        }
+
+        @Override
+        public View getView(int position, View view, ViewGroup parent) {
+            if (view == null) {
+                LayoutInflater inflater = LayoutInflater.from(getApplicationContext());
+                view = inflater.inflate(R.layout.list_row_routes, parent, false); // We inflate the row layout
+            }
+
+            TextView textview = (TextView) view.findViewById(R.id.routes_title);
+            String routeName = database.getRouteName(position);
+            textview.setText(routeName);
+
+            return view;
+        }
+    }
 
 }

@@ -33,7 +33,7 @@ public class RoutesFragment extends ListFragment {
     public class CustomAdapter extends BaseAdapter {
         @Override
         public int getCount() {
-            return 5;
+            return 0;
         }
 
         @Override

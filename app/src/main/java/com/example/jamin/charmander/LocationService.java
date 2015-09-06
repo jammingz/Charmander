@@ -44,8 +44,8 @@ public class LocationService extends Service {
 
     private static final int GPS_BUFFER = 0;
     private static final int NETWORK_BUFFER = 1;
-    private static final int SCAN_INTERVAL = 7000; // 7 seconds
-    private static final int REST_INTERVAL = 3000; // 3 second
+    private static final int SCAN_INTERVAL = 9000; // 7 seconds
+    private static final int REST_INTERVAL = 1000; // 3 second
 
 
     //private static List<List<Location>> mGPSList; // ArrayList of ArrayList of locations. Each arraylist inside mGPSList represent a scan interval of coordinates
